@@ -13,7 +13,7 @@ HMM/Viterbi → server-side evaluation → API → UI.
 |---|---|
 | `src/` | `data_loader.py` (loading), `features.py` (candidates + 18 features), `train_models.py` (training, CV, selection), `tune.py` (Bayesian tuning), `hmm_matcher.py` (HMM/Viterbi), `hybrid_matcher.py` (classifier + HMM), `classifier_matcher.py`, `baseline.py`, `evaluate.py` (metrics) |
 | `configs/models/` | one JSON per model, with an owner |
-| `api/` | FastAPI backend (laptop 1) |
+| `api/` | `api/main.py`: FastAPI backend (laptop 1): `/health`, `/trips`, `/predict`, model and matcher loading from `PATHSNAP_MATCHER` / `PATHSNAP_MODEL`, request logging |
 | `ui/` | Streamlit UI (laptop 2) and a mock API for testing |
 | `scripts/` | data summary, figures, confusion matrices, Folium map, hybrid/HMM parameter search |
 | `results/` | every experiment's CSV/JSON, `model_selection/` (official comparison), `tuning/`, `hybrid/`, `figures/`, `maps/` |
@@ -43,18 +43,38 @@ python -m src.train_models --train-dir "<path>/train" --test-dir "<path>/student
 python -m src.tune --train-dir "<path>/train" --test-dir "<path>/student_test"
 # evaluate a matcher (baseline, HMM, classifier, classifier + HMM)
 python -m src.evaluate --data-dir "<path>/student_test" --matcher src.hmm_matcher:match --name hmm
+# HMM / classifier + HMM decoding (Blason); results in results/hybrid/
+python src/demo.py --data "<path>/student_test" --trips 00000007          # HMM on a few trips, prints the matched arcs
+python scripts/tune_hybrid_weight.py --data-dir "<path>/student_test"      # classifier weight -> results/hybrid/weights.csv
+python scripts/tune_hmm_params.py --data-dir "<path>/student_test"         # HMM settings + weight -> hmm_params.csv, best_hmm_config.json
+python -m src.evaluate --data-dir "<path>/student_test" --matcher src.hybrid_matcher:match --name hmm_classifier
 # report figures, confusion matrices, Folium map
 python scripts/make_figures.py
 python scripts/make_confusion_matrices.py --test-dir "<path>/student_test" --model random_forest=results/experiments/random_forest/model.joblib
 python scripts/make_folium_map.py --data-dir "<path>/student_test" --trip 00000007 --out results/maps/trip_00000007.html
 ```
 
+## Supporting results
+
+Every number in the report comes from these committed files:
+
+| Folder / file | What it contains |
+|---|---|
+| `results/model_selection/` | official 5-model run: `model_comparison.csv` (all metrics), `cv_folds.csv` (each fold), `test_<model>_per_trip.csv` / `_summary.json`, `mlp_loss_curve.csv`, `selection.json` (settings, seed, excluded trips, selected model), `train_log.txt` (console log of the run) |
+| `results/experiments/<run>/` | each member's runs with the same layout; `selection.json` records the settings (e.g. the 7 Gaussian NB variants `nb_*`, `random_forest_tuned`) |
+| `results/tuning/random_forest/` | Bayesian search: `trials.csv` (all 25 trials), `best_params.json` (search space, sampler, best settings) |
+| `results/hybrid/` | decoder experiments: `weights.csv`, `hmm_params.csv`, `best_hmm_config.json` |
+| `results/*_summary.json`, `*_per_trip.csv` | matcher evaluations: `baseline`, `hmm`, `hmm_classifier`, `classifier_only`, `labelcheck_student_test` |
+| `results/confusion_matrices.csv`, `results/figures/`, `results/maps/` | confusion matrices, report figures, Folium map |
+| `configs/models/*.json`, `configs/hmm_default.json` | model and HMM configurations |
+
 ## Deployment (two laptops)
 
-1. **Laptop 1 (API):** set `PATHSNAP_DATA_DIR` to the trips folder, then run
+1. **Laptop 1 (API, `api/main.py`):** set `PATHSNAP_DATA_DIR` to the trips folder, then run
    `uvicorn api.main:app --host 0.0.0.0 --port 8000`. Optional settings:
    - `PATHSNAP_MATCHER` (default `src.hmm_matcher:match`)
    - `PATHSNAP_MODEL` (a model `.joblib`, for the classifier matchers)
+   - `PATHSNAP_CLASSIFIER_WEIGHT` and `PATHSNAP_HMM_CONFIG` (for `src.hybrid_matcher:match`; see `results/hybrid/`)
 
    Every request is logged to the console.
 2. **Laptop 2 (UI):** run `streamlit run ui/app.py`, and set the API URL to `http://<laptop-1-IP>:8000`.
