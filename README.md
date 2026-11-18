@@ -211,3 +211,28 @@ python -m src.evaluate --data-dir "<path>/student_test" --matcher src.classifier
 ### Results
 
 _Filled in from `results/model_selection/` after the official five-model run._
+
+## UI (laptop 2)
+
+Code: [`ui/app.py`](ui/app.py) (Streamlit page), [`ui/client.py`](ui/client.py) (API calls and
+Folium map). API format: [`docs/api_contract.md`](docs/api_contract.md).
+
+```bash
+pip install streamlit folium streamlit-folium requests
+streamlit run ui/app.py
+```
+
+1. In the sidebar, set **API URL** to laptop 1's address, e.g. `http://192.168.1.20:8000`, and
+   click **Check connection**. The URL can also come from the `PATHSNAP_API_URL` environment variable.
+2. Pick an evaluation trip and click **Match route**.
+3. The page shows:
+   - the Top-1 accuracy, route continuity, macro F1 and unmatched rate, all **computed on the API**
+   - the server time and the round-trip time
+   - a Folium map of the GPS points and the predicted route, with a legend and layer control
+
+The UI never receives ground truth. `ui/client.py` rejects any response that contains
+reference-route fields.
+
+**Testing without laptop 1:** `python ui/mock_api.py --port 8000` starts a **fake** API with
+synthetic trips (`MOCK-01` …) and made-up numbers, for checking the UI only. It is never used in
+the demo.
