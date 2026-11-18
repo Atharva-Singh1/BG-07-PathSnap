@@ -12,3 +12,6 @@ PathSnap_student_materials/
 
 # Oracle self-check output (labels scored against themselves; not a model result)
 results/oracle*
+
+# Experiment model files are large and reproducible; only models/ is committed
+results/experiments/*/model.joblib

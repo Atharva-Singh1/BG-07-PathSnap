@@ -4,5 +4,6 @@
   "family": "Probabilistic",
   "estimator": "sklearn.naive_bayes.GaussianNB",
   "params": {},
-  "scale": false
+  "preprocess": "power",
+  "drop_features": ["dist_rank", "dist_gap_m"]
 }
