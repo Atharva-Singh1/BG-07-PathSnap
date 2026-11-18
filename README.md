@@ -1,5 +1,68 @@
 # BG-07-PathSnap
-The challenge is PathSnap, a GPS-to-road map-matching system. The rules explicitly require genuine experiments and forbid invented metrics
+
+**PathSnap** matches noisy GPS traces to road segments. For each GPS point it predicts the
+road arc the vehicle was on, then decodes a connected route with an HMM/Viterbi decoder. It's
+served by a FastAPI backend (laptop 1) and a Streamlit UI (laptop 2).
+
+**Pipeline:** load trip → candidate arcs per point → 18 features → classifier (5 models compared) →
+HMM/Viterbi → server-side evaluation → API → UI.
+
+## Repository structure
+
+| Folder | Contents |
+|---|---|
+| `src/` | `data_loader.py` (loading), `features.py` (candidates + 18 features), `train_models.py` (training, CV, selection), `tune.py` (Bayesian tuning), `hmm_matcher.py` (HMM/Viterbi), `hybrid_matcher.py` (classifier + HMM), `classifier_matcher.py`, `baseline.py`, `evaluate.py` (metrics) |
+| `configs/models/` | one JSON per model, with an owner |
+| `api/` | FastAPI backend (laptop 1) |
+| `ui/` | Streamlit UI (laptop 2) and a mock API for testing |
+| `scripts/` | data summary, figures, confusion matrices, Folium map, hybrid/HMM parameter search |
+| `results/` | every experiment's CSV/JSON, `model_selection/` (official comparison), `tuning/`, `hybrid/`, `figures/`, `maps/` |
+| `tests/` | unit tests (`python -m pytest -q tests`) |
+| `docs/` | API contract, report evaluation section |
+
+The dataset is **not** in the repository. Pass its folders on the command line (`--data-dir`,
+`--train-dir`, `--test-dir`) or with `PATHSNAP_DATA_DIR` for the API.
+
+## Installation
+
+```bash
+git clone https://github.com/Atharva-Singh1/BG-07-PathSnap.git
+cd BG-07-PathSnap
+pip install -r requirements.txt
+python -m pytest -q tests
+```
+
+## Quick start
+
+```bash
+# data summary
+python scripts/summarize_data.py --data-dir "<path>/student_test"
+# train + compare the 5 models (official run, ~15 min) -> results/model_selection/, models/classifier_selected.joblib
+python -m src.train_models --train-dir "<path>/train" --test-dir "<path>/student_test"
+# Bayesian tuning of the selected model -> results/tuning/
+python -m src.tune --train-dir "<path>/train" --test-dir "<path>/student_test"
+# evaluate a matcher (baseline, HMM, classifier, classifier + HMM)
+python -m src.evaluate --data-dir "<path>/student_test" --matcher src.hmm_matcher:match --name hmm
+# report figures, confusion matrices, Folium map
+python scripts/make_figures.py
+python scripts/make_confusion_matrices.py --test-dir "<path>/student_test" --model random_forest=results/experiments/random_forest/model.joblib
+python scripts/make_folium_map.py --data-dir "<path>/student_test" --trip 00000007 --out results/maps/trip_00000007.html
+```
+
+## Deployment (two laptops)
+
+1. **Laptop 1 (API):** set `PATHSNAP_DATA_DIR` to the trips folder, then run
+   `uvicorn api.main:app --host 0.0.0.0 --port 8000`. Optional settings:
+   - `PATHSNAP_MATCHER` (default `src.hmm_matcher:match`)
+   - `PATHSNAP_MODEL` (a model `.joblib`, for the classifier matchers)
+
+   Every request is logged to the console.
+2. **Laptop 2 (UI):** run `streamlit run ui/app.py`, and set the API URL to `http://<laptop-1-IP>:8000`.
+3. Both laptops must be on the same network, and port 8000 must be allowed through the firewall.
+
+More detail is in the "API (laptop 1)" and "UI (laptop 2)" sections below. The selected model's
+weights (`models/classifier_selected.joblib`, about 29 MB) are produced by the official run. The
+same random forest configuration is committed as `results/experiments/random_forest/model.joblib`.
 
 ## Evaluation
 
@@ -214,7 +277,38 @@ python -m src.evaluate --data-dir "<path>/student_test" --matcher src.classifier
 
 ### Results
 
-_Filled in from `results/model_selection/` after the official five-model run._
+These come from the official run in `results/model_selection/` (18 features, 5-fold GroupKFold
+by trip on 78 train trips, seed 42). CV macro F1 is
+candidate-level; test macro F1 is arc-level. These are classifier-only results.
+
+| Model | Owner | Train Top-1 | CV Top-1 (± sd) | CV macro F1 | Test Top-1 | Test macro F1 | Test log loss | Continuity | s/trip |
+|---|---|---|---|---|---|---|---|---|---|
+| **random_forest** (selected) | Arjav | 0.939 | 0.875 ± 0.032 | 0.927 | 0.897 | 0.813 | 0.103 | 0.931 | 0.14 |
+| hist_gradient_boosting | Blason | 0.909 | 0.875 ± 0.032 | 0.926 | 0.892 | 0.811 | 0.104 | 0.931 | 0.13 |
+| mlp | Atharva | 0.889 | 0.871 ± 0.033 | 0.921 | 0.898 | 0.800 | 0.105 | 0.934 | 0.09 |
+| logistic_regression | Aryan | 0.857 | 0.857 ± 0.033 | 0.901 | 0.866 | 0.721 | 0.166 | 0.909 | 0.09 |
+| gaussian_nb | Aryan | 0.856 | 0.856 ± 0.032 | 0.895 | 0.863 | 0.709 | 0.225 | 0.912 | 0.10 |
+
+- **Selection:** random_forest, by mean CV Top-1. The top models are within the fold
+  spread, so they're effectively tied.
+- **Train vs CV:** the random forest shows mild overfitting. Logistic regression and Gaussian
+  NB have train ≈ CV, so they underfit.
+- **Gaussian NB:** improved from 0.839 to 0.856 CV with a power transform and by dropping
+  `dist_rank` / `dist_gap_m` (all 7 variants are in `results/experiments/nb_*`).
+- **Bayesian tuning** (`src/tune.py`, Optuna TPE, 25 trials; best:
+  n_estimators=102, max_depth=23, min_samples_leaf=3, max_features=0.734).
+  Untuned vs tuned under the same protocol:
+  - CV Top-1: 0.875 → 0.875
+  - test Top-1: 0.896 → 0.897
+  - test log loss: 0.104 → 0.107
+
+  Tuning did **not** meaningfully improve on the defaults.
+- **Decoding:** test Top-1 is 0.564 for the baseline, up to
+  0.898 for a classifier alone, and
+  **0.921 for the HMM**. Route breaks fall from 3444
+  to 371. Classifier + HMM results are in `results/hybrid/` and `results/hmm_classifier_*`.
+- **Figures** are in `results/figures/`, including candidate-level confusion matrices
+  (`confusion_matrices.png`, `results/confusion_matrices.csv`).
 
 ## UI (laptop 2)
 
