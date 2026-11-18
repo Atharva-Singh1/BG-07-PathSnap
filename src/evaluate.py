@@ -138,7 +138,11 @@ def derive_reference_labels(trip: dict) -> tuple[np.ndarray, np.ndarray]:
     nxy = project_local(nodes, lat0)
     a = nxy[arcs[route, 0]]
     b = nxy[arcs[route, 1]]
-    d = point_segment_distances(pts, a, b)         # (N, R)
+    # (N, R) distance matrix, built in chunks of points to bound peak memory
+    # (largest train trip: 7,892 points x 2,266 route arcs)
+    chunk = max(1, 2_000_000 // max(len(route), 1))
+    d = np.vstack([point_segment_distances(pts[s:s + chunk], a, b)
+                   for s in range(0, len(pts), chunk)])
 
     n, r = d.shape
     back = np.empty((n, r), dtype=np.int32)

@@ -107,3 +107,106 @@ point to the arc. Inference times depend on the machine they were run on.
   every route arc (large `ref_dist_*`) have uncertain labels.
 - The reference routes themselves come from the dataset and are not independently verified.
 - `levenshtein` is pure Python (O(n·m)). It is fine for trips of this size (≤ a few thousand arcs).
+
+## Model selection
+
+Code: [`src/features.py`](src/features.py) (candidates + features),
+[`src/train_models.py`](src/train_models.py) (training, cross-validation, selection),
+[`src/classifier_matcher.py`](src/classifier_matcher.py) (the selected model as a matcher).
+Models: one JSON file per model in [`configs/models/`](configs/models/).
+
+### Approach
+
+1. **Candidates.** For each GPS point, the up to 8 nearest arcs within 50 m. If none are within
+   50 m, the single nearest arc is used. The candidate miss rate is the share of points whose
+   reference arc is not among their candidates.
+2. **Features** for each (point, candidate arc) pair:
+   - the distance from the point to the arc, its rank among the candidates, and the gap to the nearest candidate
+   - the **cosine between the direction of travel and the arc's direction**, which separates the two directed arcs of a two-way road
+   - whether the direction of travel is known
+   - speed
+   - arc length
+   - where the point projects along the arc
+   - the number of candidates
+
+   Only the GPS trace and the road network are used.
+3. **Target:** 1 if the candidate is the point's reference arc (derived as in the Evaluation
+   section), otherwise 0. A model's prediction for a point is its highest-probability candidate
+   (observation-level Top-1).
+4. **Five models from five families**, each owned by one team member:
+
+   | Model | Family | Owner |
+   |---|---|---|
+   | Logistic regression | Linear | Aryan |
+   | Gaussian Naive Bayes | Probabilistic | Aryan |
+   | MLP | Neural network | Atharva |
+   | Random forest | Tree ensemble (bagging) | Arjav |
+   | Histogram gradient boosting | Boosting | Blason |
+
+5. **Cross-validation:** 5-fold `GroupKFold` grouped by trip on the train partition, so no trip
+   appears in both training and validation. Each fold samples at most 40,000 training points and
+   20,000 validation points, the same sample for every model, with seed 42.
+6. **Selection:** the highest mean CV Top-1 accuracy, with ties broken by lower CV log loss.
+   **`student_test` is not used for selection.** Every model is then refit on up to 80,000 train
+   points and scored on `student_test` as a classifier-only matcher with `src/evaluate.py`.
+
+**Data-quality filter (train only).** Train trips whose GPS points lie a median of more than
+50 m from their reference route are excluded, because their derived labels are unreliable (the
+route doesn't match the trace). This removes trips `00000054` and `00000033`. The excluded trips
+are recorded in each run's `selection.json`.
+
+### Adding your model
+
+Create `configs/models/<name>.json`:
+
+```json
+{
+  "name": "random_forest",
+  "owner": "Arjav",
+  "family": "Tree ensemble (bagging)",
+  "estimator": "sklearn.ensemble.RandomForestClassifier",
+  "params": {"n_estimators": 100, "min_samples_leaf": 5, "n_jobs": -1},
+  "scale": false
+}
+```
+
+- `estimator` must be a scikit-learn class.
+- `scale: true` puts a `StandardScaler` in front of the estimator.
+- `random_state` is set from `--seed` automatically.
+
+Then run only your model:
+
+```bash
+python -m src.train_models --train-dir "<path>/train" --test-dir "<path>/student_test" --models random_forest
+```
+
+To try other settings without editing the file:
+
+```bash
+python -m src.train_models ... --models random_forest --params '{"random_forest": {"n_estimators": 300}}'
+```
+
+Runs with `--models`, `--params` or `--quick` write to `results/experiments/<tag>/`. Commit that
+folder: it records the settings, the seed and the results.
+
+### Official comparison
+
+When all five configs exist, run without `--models` or `--params`:
+
+```bash
+python -m src.train_models --train-dir "<path>/train" --test-dir "<path>/student_test"
+```
+
+This is the only kind of run that writes `results/model_selection/` (`cv_folds.csv`,
+`model_comparison.csv`, `test_<model>_*`, `<model>_loss_curve.csv` for models with an epoch
+history, `selection.json`) and `models/classifier_selected.joblib`. With fewer than five configs,
+it writes to `results/experiments/` instead.
+
+```bash
+# evaluate the saved selected model as a matcher
+python -m src.evaluate --data-dir "<path>/student_test" --matcher src.classifier_matcher:match --name classifier
+```
+
+### Results
+
+_Filled in from `results/model_selection/` after the official five-model run._
