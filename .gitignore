@@ -9,3 +9,6 @@ PathSnap_student_materials/
 *.nodes
 *.arcs
 *.route
+
+# Oracle self-check output (labels scored against themselves; not a model result)
+results/oracle*
