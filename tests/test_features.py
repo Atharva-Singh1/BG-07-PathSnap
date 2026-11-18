@@ -42,3 +42,30 @@ def test_labels_and_top1():
     assert y.sum() == 12                                  # one correct candidate per point
     pred = top1(c.point, c.arc, y.astype(float), c.n_points)
     assert np.array_equal(pred, ref)
+
+
+def col(c, name):
+    return c.X[:, FEATURE_NAMES.index(name)]
+
+
+def test_eighteen_features():
+    assert len(FEATURE_NAMES) == 18
+    c = build_candidates(eastbound_trace(), NET)
+    assert c.X.shape[1] == 18 and np.all(np.isfinite(c.X))
+
+
+def test_motion_features_on_straight_1hz_trace():
+    c = build_candidates(eastbound_trace(), NET)
+    first = c.point == 0
+    assert np.all(col(c, "dt_prev_s")[first] == 0) and np.all(col(c, "dt_prev_s")[~first] == 1)
+    assert np.all(col(c, "turn_angle_deg") < 1)           # straight line: no turning
+    assert np.all(col(c, "jump_prev_m")[~first] > 20)     # ~29 m between points
+
+
+def test_network_features():
+    c = build_candidates(eastbound_trace(), NET)
+    assert np.all(col(c, "has_reverse") == 1)             # every road here is two-way
+    assert np.all(col(c, "links_prev")[c.point == 0] == 0)
+    assert np.all(col(c, "links_prev")[c.point > 0] == 1)  # all arcs touch a neighbour arc
+    assert set(col(c, "end_out_degree")) <= {1.0, 2.0}    # end nodes have 1 or 2 outgoing arcs
+    assert np.all(col(c, "node_dist_m") <= col(c, "arc_len_m") / 2 + 1e-6)

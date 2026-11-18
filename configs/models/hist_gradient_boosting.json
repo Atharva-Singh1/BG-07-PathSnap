@@ -1,0 +1,3 @@
+{"name": "hist_gradient_boosting", "owner": "Blason", "family": "Boosting",
+ "estimator": "sklearn.ensemble.HistGradientBoostingClassifier",
+ "params": {"max_iter": 200, "learning_rate": 0.1}, "scale": false}

@@ -105,3 +105,13 @@ def test_unmatched_points_count_as_wrong_not_invalid():
     assert row["route_breaks"] >= 1                   # pair (-1, arc) is a break
     assert -1 not in ev.collapse(x for x in pred if x != -1)
     assert ev.score_trip(trip, [-2] * 12, ref, dist)["status"] == "invalid"
+
+
+def test_results_json_is_strict_json_without_nan(tmp_path):
+    rows = [{"trip_id": "t1", "status": "ok", "inference_time_s": float("nan"), "point_accuracy": 1.0}]
+    summary = {"inference_time_s_mean": float("nan"), "n": 1}
+    _, json_p = ev.write_results(rows, summary, tmp_path, "x", {"run_name": "x"})
+    text = json_p.read_text()
+    assert "NaN" not in text
+    data = json.loads(text, parse_constant=lambda c: (_ for _ in ()).throw(ValueError(c)))
+    assert data["per_trip"][0]["inference_time_s"] is None
