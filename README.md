@@ -35,6 +35,9 @@ python -m pytest -q tests
 ## Quick start
 
 ```bash
+# EDA by partition -> partition-labeled CSVs and figures
+python scripts/eda.py --data-dir "<path>/train" --partition-name train --out-dir results/eda
+python scripts/eda.py --data-dir "<path>/student_test" --partition-name student_test --out-dir results/eda
 # data summary
 python scripts/summarize_data.py --data-dir "<path>/student_test"
 # train + compare the 5 models (official run, ~15 min) -> results/model_selection/, models/classifier_selected.joblib
