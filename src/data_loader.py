@@ -17,21 +17,36 @@ def _has_trip_files(folder: Path) -> bool:
 
 
 def _find_trip_folders(data_dir: Path) -> list[Path]:
-    """Find direct trip folders or one-level partition folders of trips."""
+    """Find direct trip folders or the trips of a single one-level partition folder.
+
+    Raises ValueError if trips from more than one partition (e.g. train and
+    student_test), or a mix of direct trips and partition folders, would be
+    loaded together: that silently mixes training and testing data.
+    """
     direct: list[Path] = []
-    nested: list[Path] = []
+    partitions: dict[str, list[Path]] = {}
     for child in sorted(data_dir.iterdir()):
         if not child.is_dir():
             continue
         if _has_trip_files(child):
             direct.append(child)
             continue
-        nested.extend(
+        trips = [
             grandchild
             for grandchild in sorted(child.iterdir())
             if grandchild.is_dir() and _has_trip_files(grandchild)
+        ]
+        if trips:
+            partitions[child.name] = trips
+
+    found = (["<trips directly in this folder>"] if direct else []) + sorted(partitions)
+    if len(found) > 1:
+        raise ValueError(
+            f"{data_dir} contains trips from more than one partition ({', '.join(found)}); "
+            "pass one partition directory at a time, e.g. .../train or .../student_test, "
+            "so training and testing trips are never mixed"
         )
-    return direct + nested
+    return direct + [trip for trips in partitions.values() for trip in trips]
 
 
 def _load_matrix(path: Path, columns: int, dtype: Any) -> np.ndarray:
@@ -53,7 +68,8 @@ def load_data(data_dir: str | Path) -> dict[str, dict[str, Any]]:
     """Load all trip folders under data_dir.
 
     The directory may contain trip folders directly or one partition level
-    (for example train/<trip_id>/). Each result contains a float GPS trace,
+    (for example train/<trip_id>/). A folder holding several partitions
+    (train/ and student_test/) is rejected. Each result contains a float GPS trace,
     the trip-specific nodes and directed arcs, and integer reference arc IDs.
     If a trip has no .route file, route is an empty int64 array.
     """
