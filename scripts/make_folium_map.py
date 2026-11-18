@@ -27,7 +27,7 @@ pred = [int(x) for x in load_matcher(a.matcher)(trace, t["road_network"]) if int
 seg = lambda i: [(nodes[arcs[i, 0], 1], nodes[arcs[i, 0], 0]), (nodes[arcs[i, 1], 1], nodes[arcs[i, 1], 0])]
 
 lat, lon = trace[:, 1], trace[:, 0]
-m = folium.Map(tiles="CartoDB positron", control_scale=True)
+m = folium.Map(tiles="OpenStreetMap", control_scale=True)
 m.fit_bounds([[lat.min(), lon.min()], [lat.max(), lon.max()]])
 pad = 0.003
 near = np.flatnonzero((nodes[arcs[:, 0], 1] > lat.min() - pad) & (nodes[arcs[:, 0], 1] < lat.max() + pad)
