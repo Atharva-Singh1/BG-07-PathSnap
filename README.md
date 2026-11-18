@@ -174,6 +174,10 @@ Create `configs/models/<name>.json`:
 - `estimator` must be a scikit-learn class.
 - `scale: true` puts a `StandardScaler` in front of the estimator.
 - `random_state` is set from `--seed` automatically.
+- Optional: `"preprocess": "power"` puts a `PowerTransformer` in front of the estimator (it makes
+  each feature closer to a normal distribution), and `"drop_features": [...]` leaves features out.
+  Both also work in `--params`, e.g. `{"gaussian_nb": {"preprocess": "power"}}`.
+- Every CV fold also records `train_top1_accuracy`, for over- and underfitting evidence.
 
 Then run only your model:
 

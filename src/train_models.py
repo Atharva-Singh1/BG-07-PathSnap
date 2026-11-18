@@ -38,10 +38,11 @@ from pathlib import Path
 
 import joblib
 import numpy as np
+from sklearn.compose import ColumnTransformer
 from sklearn.metrics import f1_score, log_loss
 from sklearn.model_selection import GroupKFold
 from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import PowerTransformer, StandardScaler
 
 from src.data_loader import load_data
 from src.evaluate import derive_reference_labels, score_trip, summarise, write_results
@@ -68,7 +69,10 @@ def load_model_config(path: Path, seed: int) -> tuple[str, tuple]:
     family     algorithm family (for the report table)
     estimator  scikit-learn class, e.g. "sklearn.linear_model.LogisticRegression"
     params     constructor arguments
-    scale      true -> StandardScaler before the estimator
+    scale      true -> StandardScaler before the estimator (optional, default false)
+    preprocess "power" -> PowerTransformer (Yeo-Johnson; makes each feature closer to
+               a normal distribution) before the estimator (optional)
+    drop_features  feature names to leave out, e.g. ["dist_rank"] (optional)
     random_state is set to --seed if the estimator accepts it and params don't set it.
     """
     cfg = json.loads(Path(path).read_text())
@@ -79,16 +83,54 @@ def load_model_config(path: Path, seed: int) -> tuple[str, tuple]:
     params = dict(cfg["params"])
     if "random_state" in cls().get_params() and "random_state" not in params:
         params["random_state"] = seed
-    scale = bool(cfg.get("scale", False))
+    spec = {"cls": cls, "params": params, "scale": bool(cfg.get("scale", False)),
+            "preprocess": cfg.get("preprocess"), "drop_features": list(cfg.get("drop_features", []))}
+    factory = _make_factory(spec)
+    return cfg["name"], (cfg["family"], _describe(spec), factory, cfg["owner"])
 
-    def factory(cls=cls, params=params, scale=scale):
-        est = cls(**params)
-        return make_pipeline(StandardScaler(), est) if scale else est
 
-    factory()  # fail now on bad parameter names
-    conf = (("StandardScaler + " if scale else "") + cls.__name__ + "("
-            + ", ".join(f"{k}={v}" for k, v in cfg["params"].items()) + ")")
-    return cfg["name"], (cfg["family"], conf, factory, cfg["owner"])
+STRUCTURE_KEYS = ("scale", "preprocess", "drop_features")
+
+
+def _make_factory(spec: dict):
+    """Build estimator (+ optional feature selection, scaling, power transform) from a spec."""
+    unknown = set(spec["drop_features"]) - set(FEATURE_NAMES)
+    if unknown:
+        raise ValueError(f"drop_features: unknown features {sorted(unknown)}")
+    if spec["preprocess"] not in (None, "power"):
+        raise ValueError(f"preprocess must be 'power' or absent, got {spec['preprocess']!r}")
+    keep = [i for i, f in enumerate(FEATURE_NAMES) if f not in spec["drop_features"]]
+
+    def factory(spec=spec, keep=keep):
+        steps = []
+        if len(keep) < len(FEATURE_NAMES):
+            steps.append(ColumnTransformer([("keep", "passthrough", keep)], remainder="drop"))
+        if spec["preprocess"] == "power":
+            steps.append(PowerTransformer(method="yeo-johnson", standardize=True))
+        elif spec["scale"]:
+            steps.append(StandardScaler())
+        est = spec["cls"](**spec["params"])
+        return make_pipeline(*steps, est) if steps else est
+
+    try:
+        factory()  # fail now on bad parameter names, not after the dataset is built
+    except TypeError as exc:
+        raise ValueError(f"{spec['cls'].__name__}: {exc}") from exc
+    factory.spec = spec
+    return factory
+
+
+def _describe(spec: dict) -> str:
+    parts = []
+    if spec["drop_features"]:
+        parts.append(f"drop {spec['drop_features']}")
+    if spec["preprocess"] == "power":
+        parts.append("PowerTransformer")
+    elif spec["scale"]:
+        parts.append("StandardScaler")
+    shown = {k: v for k, v in spec["params"].items() if k != "random_state"}
+    parts.append(spec["cls"].__name__ + "(" + ", ".join(f"{k}={v}" for k, v in shown.items()) + ")")
+    return " + ".join(parts)
 
 
 def make_models(seed: int, config_dir: Path = MODEL_CONFIG_DIR) -> dict:
@@ -107,22 +149,23 @@ def make_models(seed: int, config_dir: Path = MODEL_CONFIG_DIR) -> dict:
 def apply_params(models: dict, params: dict) -> dict:
     """Override hyperparameters: {"logistic_regression": {"C": 0.1}, ...}.
 
-    Parameters are set on the final estimator (after any StandardScaler).
-    Unknown model names or parameter names raise an error before training.
+    Estimator parameters are set on the final estimator. The keys "scale", "preprocess"
+    and "drop_features" change the pipeline instead, e.g.
+    {"gaussian_nb": {"preprocess": "power", "drop_features": ["dist_rank"]}}.
+    Unknown model, parameter or feature names raise an error before training.
     """
     out = dict(models)
     for name, p in params.items():
         if name not in out:
             raise ValueError(f"--params: unknown model {name!r}; choose from {sorted(out)}")
         family, conf, factory, owner = out[name]
-
-        def make(factory=factory, p=p):
-            m = factory()
-            (m[-1] if hasattr(m, "steps") else m).set_params(**p)
-            return m
-
-        make()  # validate parameter names now, not after the dataset is built
-        out[name] = (family, f"{conf} | overrides {json.dumps(p)}", make, owner)
+        spec = dict(factory.spec)
+        spec["params"] = {**spec["params"], **{k: v for k, v in p.items() if k not in STRUCTURE_KEYS}}
+        for k in STRUCTURE_KEYS:
+            if k in p:
+                spec[k] = list(p[k]) if k == "drop_features" else p[k]
+        out[name] = (family, f"{_describe(spec)} | overrides {json.dumps(p)}",
+                     _make_factory(spec), owner)
     return out
 
 
@@ -247,10 +290,13 @@ def run(args) -> int:
             pred_s = time.perf_counter() - t0
             f1m, ll = candidate_metrics(train["y"][va_rows], proba)
             acc = top1_accuracy(train, va_rows, proba)
+            # accuracy on the fold's own training points: over/underfitting evidence
+            train_acc = top1_accuracy(train, tr_rows, model.predict_proba(train["X"][tr_rows])[:, 1])
             cv_rows.append({"model": name, "fold": f, "train_points": n_tr, "val_points": n_va,
+                            "train_top1_accuracy": train_acc,
                             "top1_accuracy": acc, "candidate_macro_f1": f1m, "log_loss": ll,
                             "fit_time_s": fit_s, "predict_time_s": pred_s})
-            print(f"  CV {name:<24} fold {f}: top1={acc:.4f} candF1={f1m:.4f} logloss={ll:.4f} "
+            print(f"  CV {name:<24} fold {f}: train_top1={train_acc:.4f} top1={acc:.4f} candF1={f1m:.4f} logloss={ll:.4f} "
                   f"fit={fit_s:.1f}s")
     _write_csv(out / "cv_folds.csv", cv_rows)
 
@@ -258,7 +304,8 @@ def run(args) -> int:
     for name, (family, conf, _, owner) in models.items():
         r = [x for x in cv_rows if x["model"] == name]
         row = {"model": name, "owner": owner, "family": family, "configuration": conf}
-        for k in ["top1_accuracy", "candidate_macro_f1", "log_loss", "fit_time_s", "predict_time_s"]:
+        for k in ["train_top1_accuracy", "top1_accuracy", "candidate_macro_f1", "log_loss",
+                  "fit_time_s", "predict_time_s"]:
             v = np.array([x[k] for x in r])
             row[f"cv_{k}_mean"], row[f"cv_{k}_std"] = float(v.mean()), float(v.std())
         cv_summary.append(row)

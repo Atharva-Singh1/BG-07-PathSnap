@@ -1,0 +1,69 @@
+{
+  "selected_model": "gaussian_nb",
+  "selection_rule": "highest mean 5-fold GroupKFold CV Top-1 accuracy on train (ties: lower CV log loss); student_test not used for selection",
+  "models_run": [
+    "gaussian_nb"
+  ],
+  "param_overrides": {
+    "gaussian_nb": {
+      "preprocess": "power",
+      "drop_features": [
+        "dist_rank",
+        "dist_gap_m"
+      ]
+    }
+  },
+  "seed": 42,
+  "folds": 5,
+  "cap_train_points": 40000,
+  "cap_val_points": 20000,
+  "cap_final_points": 80000,
+  "candidate_config": {
+    "k": 8,
+    "radius_m": 50.0,
+    "sample_step_m": 10.0,
+    "k_samples": 96,
+    "heading_window": 2,
+    "min_move_m": 1.0
+  },
+  "features": [
+    "dist_m",
+    "dist_rank",
+    "dist_gap_m",
+    "heading_cos",
+    "heading_valid",
+    "speed_mps",
+    "arc_len_m",
+    "frac_along",
+    "n_cands",
+    "dt_prev_s",
+    "dt_next_s",
+    "jump_prev_m",
+    "accel_mps2",
+    "turn_angle_deg",
+    "node_dist_m",
+    "has_reverse",
+    "links_prev",
+    "end_out_degree"
+  ],
+  "train_trips_used": 78,
+  "train_trips_excluded": [
+    {
+      "trip_id": "00000033",
+      "points": 5844,
+      "median_ref_dist_m": 122.4
+    },
+    {
+      "trip_id": "00000054",
+      "points": 19313,
+      "median_ref_dist_m": 140.0
+    }
+  ],
+  "exclusion_rule": "train trips with median GPS-to-reference-route distance > 50.0 m (derived labels unreliable)",
+  "train_candidate_miss_rate": 0.01498417548837717,
+  "test_candidate_miss_rate": 0.0042275574112734865,
+  "train_points": 183260,
+  "test_points": 19160,
+  "model_file": "results/experiments/nb_power_drop_dist/model.joblib",
+  "timestamp": "2026-11-18T15:04:51"
+}
