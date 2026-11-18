@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+# Raw hackathon data and task material must never be committed
+Student folder/
+Student_folder/
+PathSnap_student_materials/
+*.track
+*.nodes
+*.arcs
+*.route
