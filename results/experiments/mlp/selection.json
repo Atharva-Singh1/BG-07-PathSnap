@@ -27,7 +27,16 @@
     "speed_mps",
     "arc_len_m",
     "frac_along",
-    "n_cands"
+    "n_cands",
+    "dt_prev_s",
+    "dt_next_s",
+    "jump_prev_m",
+    "accel_mps2",
+    "turn_angle_deg",
+    "node_dist_m",
+    "has_reverse",
+    "links_prev",
+    "end_out_degree"
   ],
   "train_trips_used": 78,
   "train_trips_excluded": [
@@ -48,5 +57,5 @@
   "train_points": 183260,
   "test_points": 19160,
   "model_file": "results/experiments/mlp/model.joblib",
-  "timestamp": "2026-11-18T13:59:17"
+  "timestamp": "2026-11-18T14:46:04"
 }
