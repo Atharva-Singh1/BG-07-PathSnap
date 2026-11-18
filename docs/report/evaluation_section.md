@@ -87,10 +87,10 @@ network, never the route.
 
 **Reference-label check.** We scored the derived reference labels against themselves on all 10
 student-testing trips. By construction this gives an accuracy of 1.0, so it is not a model result.
-It does measure how well the labels fit the data, and it gives the best score any matcher could
-reach on the sequence metrics:
+It does measure how well the labels fit the data, and it shows what the reference labels
+themselves score on the sequence metrics:
 
-| Trip | GPS points | Route arcs | Median point-to-arc distance (m) | 95th percentile (m) | Continuity ceiling | Route arc recall ceiling |
+| Trip | GPS points | Route arcs | Median point-to-arc distance (m) | 95th percentile (m) | Continuity of reference labels | Route arc recall of reference labels |
 |---|---|---|---|---|---|---|
 | 00000000 | 2,503 | 179 | 6.1 | 16.6 | 0.998 | 0.972 |
 | 00000007 | 1,354 | 123 | 4.5 | 26.1 | 1.000 | 0.984 |
@@ -109,12 +109,15 @@ What the check shows:
 - Half of the GPS points of a trip lie within 4.2 to 6.8 m of their reference arc (the median
   distance), which is consistent with normal GPS noise. On every trip, 95% of points are within
   26.1 m.
-- **Even perfect point labels cannot reach 1.0 on route arc recall** (mean 0.905). Some route arcs
-  are so short that no GPS point falls on them at 1 Hz sampling, so a method that labels points
-  cannot cover them. Trip 00000091 has the lowest ceiling (0.784).
-- For the same reason, **route continuity cannot reach 1.0 either** (mean 0.981): consecutive
-  points sometimes lie on arcs separated by a short skipped arc. Model scores on these two metrics
-  must be read against these ceilings, not against 1.0.
+- **The reference labels themselves score only 0.905 on route arc recall** (mean; lowest 0.784 on
+  trip 00000091). Some route arcs are so short that no GPS point is aligned to them at 1 Hz
+  sampling.
+- For the same reason, **the reference labels score 0.981 on route continuity** (mean):
+  consecutive points sometimes lie on arcs separated by a short skipped arc.
+- These values are **reference points, not upper bounds**. A matcher can exceed them. For example,
+  it may place a point on a short arc the alignment skipped, or it may predict the same arc for
+  many points, which inflates continuity. Model scores on these two metrics should therefore be
+  read alongside Top-1 accuracy, not on their own.
 
 ## Limitations
 
@@ -131,13 +134,15 @@ What the check shows:
 
 ## Results
 
-[To be filled only from committed files in `results/`. Do not fill in any value by hand.]
+[The remaining rows are to be filled only from committed files in `results/`. Do not fill in any
+value by hand.]
 
 | Model | Top-1 accuracy | Undirected accuracy | Macro F1 | Route continuity | Route arc F1 | Sequence similarity | Inference time (s/trip) | Source file |
 |---|---|---|---|---|---|---|---|---|
-| Nearest-road baseline | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `results/baseline_summary.json` |
+| Nearest-road baseline | 0.564 | 0.879 | 0.382 | 0.801 | 0.558 | 0.374 | 2.81 | `results/baseline_summary.json` |
+| HMM/Viterbi, distance-only emission (no classifier) | 0.921 | 0.950 | 0.866 | 0.976 | 0.923 | 0.837 | 2.14 | `results/hmm_summary.json` |
 | Classifier only | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
-| Classifier + HMM/Viterbi | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `results/hmm_summary.json` |
+| Classifier + HMM/Viterbi | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
 
 All values are means over the 10 student-testing trips.
 

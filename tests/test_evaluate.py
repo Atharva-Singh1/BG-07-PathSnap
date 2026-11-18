@@ -90,3 +90,18 @@ def test_end_to_end_with_matcher(tmp_path):
     assert rows[0]["status"] == "ok" and 0 < rows[0]["point_accuracy"] < 1
     csv_p, json_p = ev.write_results(rows, summary, tmp_path / "res", "dummy", {"run_name": "dummy"})
     assert csv_p.exists() and json.loads(json_p.read_text())["summary"]["n_trips_ok"] == 1
+
+
+def test_unmatched_points_count_as_wrong_not_invalid():
+    trip = make_trip()
+    ref, dist = ev.derive_reference_labels(trip)
+    pred = ref.copy()
+    pred[:3] = -1                     # 3 of 12 points unmatched
+    row = ev.score_trip(trip, pred, ref, dist)
+    assert row["status"] == "ok"
+    assert row["unmatched_rate"] == 0.25
+    assert row["point_accuracy"] == 0.75
+    assert row["point_accuracy_undirected"] == 0.75   # -1 must not alias arcs[-1]
+    assert row["route_breaks"] >= 1                   # pair (-1, arc) is a break
+    assert -1 not in ev.collapse(x for x in pred if x != -1)
+    assert ev.score_trip(trip, [-2] * 12, ref, dist)["status"] == "invalid"
