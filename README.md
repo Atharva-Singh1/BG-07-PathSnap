@@ -236,3 +236,18 @@ reference-route fields.
 **Testing without laptop 1:** `python ui/mock_api.py --port 8000` starts a **fake** API with
 synthetic trips (`MOCK-01` …) and made-up numbers, for checking the UI only. It is never used in
 the demo.
+
+## API (laptop 1)
+
+The API serves one data partition from outside the repository. In PowerShell on laptop 1:
+
+```powershell
+$env:PATHSNAP_DATA_DIR = "<path>\Student folder\Student folder\student_test"
+$env:PATHSNAP_MATCHER = "src.hmm_matcher:match"  # optional; this is the default
+python -m pip install fastapi uvicorn httpx
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+The API loads the selected partition once at startup. Laptop 2 should connect the UI to
+`http://<laptop-1-IP>:8000`. Find laptop 1's IP with `ipconfig`. Both laptops must be on the
+same network. Windows Firewall may need to allow inbound traffic on port 8000.
