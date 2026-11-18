@@ -405,8 +405,20 @@ def write_results(rows, summary, out_dir: Path, name: str, meta: dict) -> tuple[
         for r in rows:
             w.writerow({k: r.get(k, "") for k in PER_TRIP_FIELDS})
     with open(json_path, "w") as f:
-        json.dump({**meta, "summary": summary, "per_trip": rows}, f, indent=2, default=_json_default)
+        # NaN is not valid JSON: write it as null (e.g. inference time of an oracle run)
+        json.dump(_nan_to_none({**meta, "summary": summary, "per_trip": rows}), f, indent=2,
+                  default=_json_default, allow_nan=False)
     return csv_path, json_path
+
+
+def _nan_to_none(o):
+    if isinstance(o, dict):
+        return {k: _nan_to_none(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_nan_to_none(v) for v in o]
+    if isinstance(o, (float, np.floating)) and math.isnan(o):
+        return None
+    return o
 
 
 def _json_default(o):
