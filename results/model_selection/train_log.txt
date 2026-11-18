@@ -1,0 +1,103 @@
+Output folder: results\model_selection   model file: models\classifier_selected.joblib
+Building train dataset ...
+  excluded 00000033: median distance to reference route 122.4 m
+  excluded 00000054: median distance to reference route 140.0 m
+  train: 78 trips, 183260 points, 1034694 candidate rows, candidate miss rate 0.0150 (29.0s)
+Building student_test dataset ...
+  student_test: 10 trips, 19160 points, 113694 candidate rows, candidate miss rate 0.0042 (2.2s)
+  CV gaussian_nb              fold 0: train_top1=0.8552 top1=0.8538 candF1=0.8986 logloss=0.2234 fit=4.8s
+  CV gaussian_nb              fold 1: train_top1=0.8535 top1=0.8662 candF1=0.8955 logloss=0.2468 fit=4.9s
+  CV gaussian_nb              fold 2: train_top1=0.8485 top1=0.8696 candF1=0.8986 logloss=0.2109 fit=4.9s
+  CV gaussian_nb              fold 3: train_top1=0.8502 top1=0.8915 candF1=0.9154 logloss=0.1870 fit=5.2s
+  CV gaussian_nb              fold 4: train_top1=0.8722 top1=0.7967 candF1=0.8691 logloss=0.2598 fit=5.9s
+  CV hist_gradient_boosting   fold 0: train_top1=0.8971 top1=0.8744 candF1=0.9236 logloss=0.1126 fit=5.1s
+  CV hist_gradient_boosting   fold 1: train_top1=0.9088 top1=0.8831 candF1=0.9235 logloss=0.1204 fit=4.5s
+  CV hist_gradient_boosting   fold 2: train_top1=0.9078 top1=0.8902 candF1=0.9319 logloss=0.1016 fit=4.3s
+  CV hist_gradient_boosting   fold 3: train_top1=0.9043 top1=0.9101 candF1=0.9505 logloss=0.0774 fit=4.6s
+  CV hist_gradient_boosting   fold 4: train_top1=0.9270 top1=0.8163 candF1=0.8983 logloss=0.1257 fit=4.2s
+  CV logistic_regression      fold 0: train_top1=0.8571 top1=0.8593 candF1=0.9048 logloss=0.1710 fit=0.4s
+  CV logistic_regression      fold 1: train_top1=0.8559 top1=0.8693 candF1=0.9083 logloss=0.1794 fit=0.4s
+  CV logistic_regression      fold 2: train_top1=0.8533 top1=0.8675 candF1=0.9006 logloss=0.1669 fit=0.4s
+  CV logistic_regression      fold 3: train_top1=0.8497 top1=0.8930 candF1=0.9206 logloss=0.1408 fit=0.4s
+  CV logistic_regression      fold 4: train_top1=0.8713 top1=0.7960 candF1=0.8715 logloss=0.1842 fit=0.4s
+  CV mlp                      fold 0: train_top1=0.8890 top1=0.8697 candF1=0.9196 logloss=0.1212 fit=48.1s
+  CV mlp                      fold 1: train_top1=0.8833 top1=0.8858 candF1=0.9249 logloss=0.1250 fit=34.3s
+  CV mlp                      fold 2: train_top1=0.8868 top1=0.8875 candF1=0.9271 logloss=0.1111 fit=50.8s
+  CV mlp                      fold 3: train_top1=0.8767 top1=0.9043 candF1=0.9438 logloss=0.0883 fit=24.1s
+  CV mlp                      fold 4: train_top1=0.9079 top1=0.8102 candF1=0.8910 logloss=0.1404 fit=52.4s
+  CV random_forest            fold 0: train_top1=0.9393 top1=0.8755 candF1=0.9238 logloss=0.1165 fit=19.1s
+  CV random_forest            fold 1: train_top1=0.9366 top1=0.8875 candF1=0.9302 logloss=0.1190 fit=20.5s
+  CV random_forest            fold 2: train_top1=0.9385 top1=0.8907 candF1=0.9328 logloss=0.1000 fit=20.2s
+  CV random_forest            fold 3: train_top1=0.9370 top1=0.9071 candF1=0.9494 logloss=0.0815 fit=21.3s
+  CV random_forest            fold 4: train_top1=0.9459 top1=0.8143 candF1=0.8980 logloss=0.1269 fit=17.5s
+Selected by mean CV Top-1 accuracy: random_forest
+  TEST gaussian_nb              top1=0.8629 arcF1=0.7086 logloss=0.2255 cont=0.9119
+  TEST hist_gradient_boosting   top1=0.8922 arcF1=0.8107 logloss=0.1039 cont=0.9312
+  TEST logistic_regression      top1=0.8656 arcF1=0.7209 logloss=0.1656 cont=0.9087
+  TEST mlp                      top1=0.8979 arcF1=0.8001 logloss=0.1049 cont=0.9337
+  TEST random_forest            top1=0.8973 arcF1=0.8129 logloss=0.1034 cont=0.9309
+{
+  "selected_model": "random_forest",
+  "selection_rule": "highest mean 5-fold GroupKFold CV Top-1 accuracy on train (ties: lower CV log loss); student_test not used for selection",
+  "models_run": [
+    "gaussian_nb",
+    "hist_gradient_boosting",
+    "logistic_regression",
+    "mlp",
+    "random_forest"
+  ],
+  "param_overrides": {},
+  "seed": 42,
+  "folds": 5,
+  "cap_train_points": 40000,
+  "cap_val_points": 20000,
+  "cap_final_points": 80000,
+  "candidate_config": {
+    "k": 8,
+    "radius_m": 50.0,
+    "sample_step_m": 10.0,
+    "k_samples": 96,
+    "heading_window": 2,
+    "min_move_m": 1.0
+  },
+  "features": [
+    "dist_m",
+    "dist_rank",
+    "dist_gap_m",
+    "heading_cos",
+    "heading_valid",
+    "speed_mps",
+    "arc_len_m",
+    "frac_along",
+    "n_cands",
+    "dt_prev_s",
+    "dt_next_s",
+    "jump_prev_m",
+    "accel_mps2",
+    "turn_angle_deg",
+    "node_dist_m",
+    "has_reverse",
+    "links_prev",
+    "end_out_degree"
+  ],
+  "train_trips_used": 78,
+  "train_trips_excluded": [
+    {
+      "trip_id": "00000033",
+      "points": 5844,
+      "median_ref_dist_m": 122.4
+    },
+    {
+      "trip_id": "00000054",
+      "points": 19313,
+      "median_ref_dist_m": 140.0
+    }
+  ],
+  "exclusion_rule": "train trips with median GPS-to-reference-route distance > 50.0 m (derived labels unreliable)",
+  "train_candidate_miss_rate": 0.01498417548837717,
+  "test_candidate_miss_rate": 0.0042275574112734865,
+  "train_points": 183260,
+  "test_points": 19160,
+  "model_file": "models/classifier_selected.joblib",
+  "timestamp": "2026-11-18T15:21:33"
+}
