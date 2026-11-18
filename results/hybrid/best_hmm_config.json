@@ -1,0 +1,12 @@
+{
+  "candidate_radius_m": 50.0,
+  "max_candidates": 8,
+  "sigma_m": 12.0,
+  "beta_m": 30.0,
+  "max_route_factor": 4.0,
+  "route_slack_m": 200.0,
+  "backward_penalty_m": 5.0,
+  "min_step_m": 2.0,
+  "max_gap_s": 60.0,
+  "log_floor": -1000000000.0
+}
