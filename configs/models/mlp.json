@@ -1,0 +1,1 @@
+{"name": "mlp", "owner": "Atharva", "family": "Neural network", "estimator": "sklearn.neural_network.MLPClassifier", "params": {"hidden_layer_sizes": [64, 32], "early_stopping": true, "max_iter": 200}, "scale": true}
