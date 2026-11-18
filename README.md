@@ -120,14 +120,15 @@ Models: one JSON file per model in [`configs/models/`](configs/models/).
 1. **Candidates.** For each GPS point, the up to 8 nearest arcs within 50 m. If none are within
    50 m, the single nearest arc is used. The candidate miss rate is the share of points whose
    reference arc is not among their candidates.
-2. **Features** for each (point, candidate arc) pair:
-   - the distance from the point to the arc, its rank among the candidates, and the gap to the nearest candidate
-   - the **cosine between the direction of travel and the arc's direction**, which separates the two directed arcs of a two-way road
-   - whether the direction of travel is known
-   - speed
-   - arc length
-   - where the point projects along the arc
-   - the number of candidates
+2. **18 features** for each (point, candidate arc) pair, all in `src/features.py`:
+
+   | Group | Features |
+   |---|---|
+   | Distance | `dist_m` (point to arc), `dist_rank` (rank among the candidates), `dist_gap_m` (gap to the nearest candidate) |
+   | Direction | `heading_cos` (**direction of travel vs the arc's direction**, which separates the two directed arcs of a two-way road), `heading_valid`, `turn_angle_deg` (how sharply the GPS track turns) |
+   | Motion | `speed_mps`, `accel_mps2`, `jump_prev_m` (distance from the previous point), `dt_prev_s` / `dt_next_s` (time gaps) |
+   | Arc and junction | `arc_len_m`, `frac_along` (where the point projects along the arc), `node_dist_m` (distance to the nearest arc end), `end_out_degree` (number of arcs leaving the end node) |
+   | Context | `n_cands` (number of candidates), `has_reverse` (the opposite direction is also a candidate), `links_prev` (shares a node with the previous point's nearest arc) |
 
    Only the GPS trace and the road network are used.
 3. **Target:** 1 if the candidate is the point's reference arc (derived as in the Evaluation
@@ -210,3 +211,28 @@ python -m src.evaluate --data-dir "<path>/student_test" --matcher src.classifier
 ### Results
 
 _Filled in from `results/model_selection/` after the official five-model run._
+
+## UI (laptop 2)
+
+Code: [`ui/app.py`](ui/app.py) (Streamlit page), [`ui/client.py`](ui/client.py) (API calls and
+Folium map). API format: [`docs/api_contract.md`](docs/api_contract.md).
+
+```bash
+pip install streamlit folium streamlit-folium requests
+streamlit run ui/app.py
+```
+
+1. In the sidebar, set **API URL** to laptop 1's address, e.g. `http://192.168.1.20:8000`, and
+   click **Check connection**. The URL can also come from the `PATHSNAP_API_URL` environment variable.
+2. Pick an evaluation trip and click **Match route**.
+3. The page shows:
+   - the Top-1 accuracy, route continuity, macro F1 and unmatched rate, all **computed on the API**
+   - the server time and the round-trip time
+   - a Folium map of the GPS points and the predicted route, with a legend and layer control
+
+The UI never receives ground truth. `ui/client.py` rejects any response that contains
+reference-route fields.
+
+**Testing without laptop 1:** `python ui/mock_api.py --port 8000` starts a **fake** API with
+synthetic trips (`MOCK-01` …) and made-up numbers, for checking the UI only. It is never used in
+the demo.
