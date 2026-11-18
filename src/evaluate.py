@@ -99,7 +99,9 @@ def list_trips(data_dir: Path) -> list[Path]:
 def project_local(lonlat: np.ndarray, lat0: float) -> np.ndarray:
     """Equirectangular projection to metres around reference latitude lat0.
 
-    Error is negligible at the few-km extent of a single trip.
+    Trips span up to ~45 km (student_test); the east-west scale error from
+    using one cos(lat0) is below 0.5% there, negligible for the short
+    point-to-arc distances computed here.
     """
     lon = np.radians(lonlat[:, 0])
     lat = np.radians(lonlat[:, 1])
