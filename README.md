@@ -120,14 +120,15 @@ Models: one JSON file per model in [`configs/models/`](configs/models/).
 1. **Candidates.** For each GPS point, the up to 8 nearest arcs within 50 m. If none are within
    50 m, the single nearest arc is used. The candidate miss rate is the share of points whose
    reference arc is not among their candidates.
-2. **Features** for each (point, candidate arc) pair:
-   - the distance from the point to the arc, its rank among the candidates, and the gap to the nearest candidate
-   - the **cosine between the direction of travel and the arc's direction**, which separates the two directed arcs of a two-way road
-   - whether the direction of travel is known
-   - speed
-   - arc length
-   - where the point projects along the arc
-   - the number of candidates
+2. **18 features** for each (point, candidate arc) pair, all in `src/features.py`:
+
+   | Group | Features |
+   |---|---|
+   | Distance | `dist_m` (point to arc), `dist_rank` (rank among the candidates), `dist_gap_m` (gap to the nearest candidate) |
+   | Direction | `heading_cos` (**direction of travel vs the arc's direction**, which separates the two directed arcs of a two-way road), `heading_valid`, `turn_angle_deg` (how sharply the GPS track turns) |
+   | Motion | `speed_mps`, `accel_mps2`, `jump_prev_m` (distance from the previous point), `dt_prev_s` / `dt_next_s` (time gaps) |
+   | Arc and junction | `arc_len_m`, `frac_along` (where the point projects along the arc), `node_dist_m` (distance to the nearest arc end), `end_out_degree` (number of arcs leaving the end node) |
+   | Context | `n_cands` (number of candidates), `has_reverse` (the opposite direction is also a candidate), `links_prev` (shares a node with the previous point's nearest arc) |
 
    Only the GPS trace and the road network are used.
 3. **Target:** 1 if the candidate is the point's reference arc (derived as in the Evaluation

@@ -17,6 +17,20 @@ Features (FEATURE_NAMES):
   arc_len_m       length of the candidate arc
   frac_along      where the point projects onto the arc (0 = start, 1 = end)
   n_cands         number of candidates this point has
+  dt_prev_s       seconds since the previous GPS point (0 for the first point)
+  dt_next_s       seconds until the next GPS point (0 for the last point)
+  jump_prev_m     distance the GPS point moved from the previous point
+                  (large jumps indicate noise or a gap)
+  accel_mps2      change in speed between the neighbouring windows
+  turn_angle_deg  how sharply the GPS track turns at this point (0 = straight,
+                  180 = U-turn); 0 if the vehicle is almost stationary
+  node_dist_m     distance from the projected point to the nearest end of the
+                  arc (small = close to a junction, where errors are common)
+  has_reverse     1 if the same road in the opposite direction is also a
+                  candidate for this point (a two-way road), else 0
+  links_prev      1 if the arc shares a node with the previous point's nearest
+                  candidate arc (a simple sequence clue), else 0
+  end_out_degree  number of arcs leaving the arc's end node (junction size)
 
 Only the GPS trace and the road network are used. The route / reference
 labels are never inputs; they are used only to build training labels
@@ -33,7 +47,9 @@ from scipy.spatial import cKDTree
 from src.evaluate import project_local
 
 FEATURE_NAMES = ["dist_m", "dist_rank", "dist_gap_m", "heading_cos", "heading_valid",
-                 "speed_mps", "arc_len_m", "frac_along", "n_cands"]
+                 "speed_mps", "arc_len_m", "frac_along", "n_cands",
+                 "dt_prev_s", "dt_next_s", "jump_prev_m", "accel_mps2", "turn_angle_deg",
+                 "node_dist_m", "has_reverse", "links_prev", "end_out_degree"]
 
 
 @dataclass
@@ -137,8 +153,44 @@ def build_candidates(trace, road_network, cfg: CandidateConfig | None = None) ->
     ab_unit = ab / np.maximum(length[cand], 1e-9)[:, None]
     heading_cos = np.einsum("ij,ij->i", unit[rows], ab_unit)
 
+    # ---- point-level motion features -------------------------------------
+    ts = trace[:, 2]
+    dt_prev = np.r_[0.0, np.diff(ts)]
+    dt_next = np.r_[np.diff(ts), 0.0]
+    jump_prev = np.r_[0.0, np.hypot(*np.diff(xy, axis=0).T)]
+    w = cfg.heading_window
+    lo = np.clip(np.arange(n) - w, 0, n - 1)
+    hi = np.clip(np.arange(n) + w, 0, n - 1)
+    dt_win = ts[hi] - ts[lo]
+    accel = np.where(dt_win > 0, (speed[hi] - speed[lo]) / np.where(dt_win > 0, dt_win, 1), 0.0)
+    v_in, v_out = xy - xy[lo], xy[hi] - xy
+    n_in, n_out = np.hypot(*v_in.T), np.hypot(*v_out.T)
+    turn_ok = (n_in >= cfg.min_move_m) & (n_out >= cfg.min_move_m)
+    cos_turn = np.einsum("ij,ij->i", v_in, v_out) / np.maximum(n_in * n_out, 1e-9)
+    turn = np.where(turn_ok, np.degrees(np.arccos(np.clip(cos_turn, -1.0, 1.0))), 0.0)
+
+    # ---- candidate-level network features --------------------------------
+    u, v = arcs[cand, 0], arcs[cand, 1]
+    node_dist = np.minimum(frac, 1.0 - frac) * length[cand]
+    n_nodes = len(nodes)
+    key = (rows.astype(np.int64) * n_nodes + u) * n_nodes + v
+    rev_key = (rows.astype(np.int64) * n_nodes + v) * n_nodes + u
+    has_reverse = np.isin(rev_key, key).astype(float)
+    nearest_arc = cand[rank == 0]                     # one per point (rows are sorted)
+    nearest_of_point = np.empty(n, dtype=np.int64)
+    nearest_of_point[rows[rank == 0]] = nearest_arc
+    has_prev = rows > 0
+    prev_arc = nearest_of_point[np.maximum(rows - 1, 0)]
+    pu, pv = arcs[prev_arc, 0], arcs[prev_arc, 1]
+    links_prev = (has_prev & ((u == pu) | (u == pv) | (v == pu) | (v == pv))).astype(float)
+    out_degree = np.bincount(arcs[:, 0], minlength=n_nodes)
+    end_out_degree = out_degree[v]
+
     X = np.column_stack([dist, rank, dist - min_d, heading_cos, valid[rows].astype(float),
-                         speed[rows], length[cand], frac, n_cands]).astype(np.float64)
+                         speed[rows], length[cand], frac, n_cands,
+                         dt_prev[rows], dt_next[rows], jump_prev[rows], accel[rows], turn[rows],
+                         node_dist, has_reverse, links_prev, end_out_degree]).astype(np.float64)
+    assert X.shape[1] == len(FEATURE_NAMES)
     return Candidates(point=rows, arc=cand, X=X, n_points=n)
 
 
