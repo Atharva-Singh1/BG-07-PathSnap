@@ -1,0 +1,6 @@
+model,model_file,tn,fp,fn,tp,recall_correct_arc,precision_correct_arc
+logistic_regression,results/experiments/logistic_regression/model.joblib,91223,3392,3070,16009,0.8390900990617957,0.8251636513581774
+gaussian_nb,results/experiments/nb_power_drop_dist/model.joblib,91774,2841,3845,15234,0.7984695214633891,0.8428215767634855
+hist_gradient_boosting,results/experiments/hist_gradient_boosting/model.joblib,92305,2310,2550,16529,0.8663451962891137,0.8773820266468496
+mlp,results/experiments/mlp/model.joblib,92655,1960,2564,16515,0.8656114052099166,0.8939106901217861
+random_forest,results/experiments/random_forest/model.joblib,92598,2017,2516,16563,0.8681272603385922,0.8914424111948331
