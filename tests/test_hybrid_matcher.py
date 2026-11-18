@@ -75,3 +75,31 @@ def test_match_reads_environment(monkeypatch):
 def test_default_weight_is_one(monkeypatch):
     monkeypatch.delenv("PATHSNAP_CLASSIFIER_WEIGHT", raising=False)
     assert hybrid_matcher.classifier_weight() == 1.0
+
+
+def test_hmm_cfg_is_passed_through():
+    from src.hmm_matcher import HMMConfig
+    cfg = HMMConfig(sigma_m=8.0, beta_m=60.0)
+    trace = eastbound_trace()
+    assert match_with(trace, NET, 0, bundle(), hmm_cfg=cfg) == hmm_match(trace, NET, cfg)
+
+
+def test_precomputed_scores_skip_the_classifier(monkeypatch):
+    from src.classifier_matcher import candidate_scores
+    trace = eastbound_trace()
+    expected = match_with(trace, NET, 1.0, bundle=bundle())
+    scores = candidate_scores(trace, NET, bundle())
+    monkeypatch.setattr(hybrid_matcher, "candidate_scores",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("recomputed")))
+    assert match_with(trace, NET, 1.0, scores=scores) == expected
+
+
+def test_match_reads_hmm_config_env(monkeypatch, tmp_path):
+    from src.hmm_matcher import HMMConfig
+    cfg = HMMConfig(sigma_m=8.0, beta_m=60.0)
+    f = tmp_path / "hmm.json"
+    cfg.to_json(f)
+    monkeypatch.setattr(hybrid_matcher, "load_bundle", lambda path: bundle())
+    monkeypatch.setenv("PATHSNAP_CLASSIFIER_WEIGHT", "0")
+    monkeypatch.setenv("PATHSNAP_HMM_CONFIG", str(f))
+    assert match(eastbound_trace(), NET) == hmm_match(eastbound_trace(), NET, cfg)
