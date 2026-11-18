@@ -1,0 +1,8 @@
+{
+  "name": "gaussian_nb",
+  "owner": "Aryan",
+  "family": "Probabilistic",
+  "estimator": "sklearn.naive_bayes.GaussianNB",
+  "params": {},
+  "scale": false
+}
