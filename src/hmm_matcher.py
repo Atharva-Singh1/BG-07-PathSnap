@@ -336,3 +336,13 @@ def quick_eval(pred: np.ndarray, route: np.ndarray, graph: RoadGraph) -> dict:
                 arc_precision=len(ref & ps) / max(len(ps), 1),
                 continuity=ok / max(len(dedup) - 1, 1),
                 n_pred_arcs=len(dedup), n_ref_arcs=len(ref))
+
+# --------------------------------------------------------------------------
+# Shared interface used by src/evaluate.py (and the API)
+# --------------------------------------------------------------------------
+def match(trace, road_network, cfg: HMMConfig | None = None) -> list[int]:
+    """match(trace, road_network) -> one arc id per GPS point (-1 = unmatched)."""
+    trace = np.atleast_2d(np.asarray(trace, dtype=float))
+    trip = {"track": trace, "nodes": np.asarray(road_network["nodes"], dtype=float),
+            "arcs": np.atleast_2d(np.asarray(road_network["arcs"], dtype=int))}
+    return build_matcher(trip, cfg).match(trace).arc_ids.tolist()

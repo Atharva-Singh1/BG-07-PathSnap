@@ -52,10 +52,11 @@ from typing import Callable, Sequence
 import numpy as np
 
 EARTH_RADIUS_M = 6_371_008.8
+UNMATCHED = -1   # a matcher may return -1 for a point it could not match; scored as wrong
 
 PER_TRIP_FIELDS = [
     "trip_id", "n_points", "n_route_arcs", "status",
-    "point_accuracy", "point_accuracy_undirected",
+    "point_accuracy", "point_accuracy_undirected", "unmatched_rate",
     "macro_precision", "macro_recall", "macro_f1",
     "route_continuity", "route_breaks",
     "route_arc_precision", "route_arc_recall", "route_arc_f1",
@@ -168,17 +169,33 @@ def point_accuracy(pred: Sequence[int], ref: Sequence[int]) -> float:
 
 
 def point_accuracy_undirected(pred, ref, arcs: np.ndarray) -> float:
-    """Accuracy where an arc and its reverse twin (same two nodes) count as equal."""
+    """Accuracy where an arc and its reverse twin (same two nodes) count as equal.
+
+    Unmatched points (-1) count as wrong.
+    """
     pred, ref = np.asarray(pred), np.asarray(ref)
-    pk = np.sort(arcs[pred], axis=1)
+    if not len(ref):
+        return float("nan")
+    matched = pred != UNMATCHED
+    pk = np.sort(arcs[np.where(matched, pred, 0)], axis=1)
     rk = np.sort(arcs[ref], axis=1)
-    return float(np.mean(np.all(pk == rk, axis=1))) if len(ref) else float("nan")
+    return float(np.mean(matched & np.all(pk == rk, axis=1)))
+
+
+def unmatched_rate(pred) -> float:
+    pred = np.asarray(pred)
+    return float(np.mean(pred == UNMATCHED)) if len(pred) else float("nan")
 
 
 def macro_prf(pred, ref) -> tuple[float, float, float]:
-    """Macro precision/recall/F1 over arc ids appearing in pred or ref."""
+    """Macro precision/recall/F1 over arc ids appearing in pred or ref.
+
+    -1 (unmatched) is not a class: an unmatched point is a missed reference
+    point, so it lowers recall of its reference arc.
+    """
     from sklearn.metrics import precision_recall_fscore_support
     labels = np.union1d(np.asarray(pred), np.asarray(ref))
+    labels = labels[labels != UNMATCHED]
     p, r, f, _ = precision_recall_fscore_support(
         ref, pred, labels=labels, average="macro", zero_division=0)
     return float(p), float(r), float(f)
@@ -190,19 +207,21 @@ def route_continuity(pred, arcs: np.ndarray) -> tuple[float, int]:
 
     Returns (continuity, number_of_breaks). Note that at 1 Hz a very short arc
     can be skipped legitimately, so even perfect labels may score < 1; compare
-    with `ref_route_continuity`.
+    with `ref_route_continuity`. A pair involving an unmatched point (-1) is a break.
     """
     pred = np.asarray(pred)
     if len(pred) < 2:
         return float("nan"), 0
     prev, nxt = pred[:-1], pred[1:]
-    ok = (prev == nxt) | (arcs[prev, 1] == arcs[nxt, 0])
+    both = (prev != UNMATCHED) & (nxt != UNMATCHED)
+    p0, n0 = np.where(both, prev, 0), np.where(both, nxt, 0)
+    ok = both & ((prev == nxt) | (arcs[p0, 1] == arcs[n0, 0]))
     return float(np.mean(ok)), int(np.sum(~ok))
 
 
 def route_arc_prf(pred, route) -> tuple[float, float, float]:
     """Set-level precision/recall/F1 of the predicted arc set vs reference route arcs."""
-    ps, rs = set(map(int, pred)), set(map(int, route))
+    ps, rs = set(map(int, pred)) - {UNMATCHED}, set(map(int, route))
     tp = len(ps & rs)
     p = tp / len(ps) if ps else 0.0
     r = tp / len(rs) if rs else 0.0
@@ -233,8 +252,12 @@ def levenshtein(a: Sequence[int], b: Sequence[int]) -> int:
 
 
 def sequence_similarity(pred, route) -> float:
-    """1 - normalised edit distance between collapsed prediction and the route."""
-    cp, cr = collapse(pred), collapse(route)
+    """1 - normalised edit distance between collapsed prediction and the route.
+
+    Unmatched points (-1) are dropped before collapsing.
+    """
+    cp = collapse(x for x in pred if int(x) != UNMATCHED)
+    cr = collapse(route)
     denom = max(len(cp), len(cr))
     return 1.0 - levenshtein(cp, cr) / denom if denom else float("nan")
 
@@ -270,12 +293,13 @@ def score_trip(trip: dict, pred, ref_labels=None, ref_dist=None,
         row.update(status="invalid",
                    error=f"prediction length {len(pred)} != number of GPS points {len(ref_labels)}")
         return row
-    if len(pred) and (pred.min() < 0 or pred.max() >= len(arcs)):
+    if len(pred) and (pred.min() < UNMATCHED or pred.max() >= len(arcs)):
         row.update(status="invalid", error="prediction contains arc ids outside this trip's network")
         return row
 
     row["point_accuracy"] = point_accuracy(pred, ref_labels)
     row["point_accuracy_undirected"] = point_accuracy_undirected(pred, ref_labels, arcs)
+    row["unmatched_rate"] = unmatched_rate(pred)
     row["macro_precision"], row["macro_recall"], row["macro_f1"] = macro_prf(pred, ref_labels)
     row["route_continuity"], row["route_breaks"] = route_continuity(pred, arcs)
     (row["route_arc_precision"], row["route_arc_recall"],
@@ -351,7 +375,8 @@ def summarise(rows: list[dict]) -> dict:
     n_pts = np.array([r["n_points"] for r in ok])
     acc = np.array([r["point_accuracy"] for r in ok])
     summary["point_accuracy_pooled"] = float(np.sum(acc * n_pts) / np.sum(n_pts))
-    for k in ["point_accuracy", "point_accuracy_undirected", "macro_precision", "macro_recall",
+    for k in ["point_accuracy", "point_accuracy_undirected", "unmatched_rate",
+              "macro_precision", "macro_recall",
               "macro_f1", "route_continuity", "route_arc_precision", "route_arc_recall",
               "route_arc_f1", "sequence_similarity", "inference_time_s", "ref_dist_median_m",
               "ref_route_continuity"]:
